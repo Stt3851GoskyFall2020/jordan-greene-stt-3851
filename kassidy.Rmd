@@ -1,0 +1,94 @@
+---
+title: "Project 1"
+author: "Kassidy Borum"
+date: "4/3/2020"
+output: html_document
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ggplot2)
+library(readxl)
+library(dplyr)
+```
+  
+Import data:
+```{r}
+library(readxl)
+
+house <- read_xlsx("data/Housing.xlsx")
+```
+
+#Data Summary: 
+
+**Find any missing values or values that may need clarification/modification**
+```{r}
+#view(house)
+head(house)
+summary(house)
+
+pairs(~house$price + house$id + house$size + house$lot + house$bath + house$bedrooms + house$yearbuilt + house$agestandardized + house$garagesize) #scatteplot matrix for all the numerical variables.
+
+pairs(~house$price + house$yearbuilt + house$lot + house$size) #a smaller scale of the scatterplot matrix of the variables that looked that like price increased as the other vairables increased based on the previous matrix. 
+```
+
+```{r}
+is.na(house) #This code is used to check for any missing values in the data set. Since all values come back saying "FALSE", there is no missing values.
+```
+
+**Stats / Visuals for Categorical Varaibles**
+```{r}
+status_table <- table(house$status) #Amount of houses for each status
+status_table
+elem_table <- table(house$elem) #Amount of houses for each elementary school district
+elem_table
+
+status_elem_table <- table(house$status, house$elem) #used to look at the number of sold, pending sale, and active listing for each elementary school distrct
+
+prop.table(status_table) #finds the precentage of house sold, pending sale, and active listing
+prop.table(elem_table) #finds the precentage of all the houses listed in each district
+prop.table(status_elem_table) #finds the precentage for each status in each district
+
+reorder_size <- function(x) {
+        factor(x, levels = names(sort(table(x), decreasing = TRUE)))
+} #used to make the plots be shown in descending order
+
+ggplot(house, aes(x = reorder_size(elem))) +
+        geom_bar(fill = "mediumpurple1") +
+        xlab("Elementary School District") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(house, aes(x = reorder_size(status))) +
+        geom_bar(fill = "lightcoral") +
+        xlab("Status of Houses") +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ 
+
+```
+
+*We can change the categorical variables to numeric values. Ex., for the status variable we could change sld = 1, pen = 2, and act = 3, but for now I am leaving the variables as they are. We can change this later on*
+
+
+#Explortory Data Analysis:
+```{r}
+#First I'm creating a multiple linear regression model
+#I included all the varaibles except that "id" varaibel as that refers to the case number and felt like it would not help with predict price. (I thought of this as the same idea as student banner ID numbers would not help predict a student grades as it is a randomly assigned number)
+
+price_model <- lm(house$price~house$status + house$elem + house$size + house$lot + house$bath + house$bedrooms + house$yearbuilt + house$agestandardized + house$garagesize)
+summary(price_model)
+
+#I'm taking out the varaibles with larger p-values and seeing how it effects the overall effecicenty of the model this is to help find "the best fit" model
+price_model2 <- lm(house$price~house$status + house$elem + house$size + house$lot + house$bedrooms + house$yearbuilt + house$garagesize)
+summary(price_model2)
+
+price_model3 <- lm(house$price~house$status + house$elem + house$size + house$lot + house$bedrooms + house$yearbuilt)
+summary(price_model3)
+```
+
+#Initial Modeling:
+```{r}
+#I am using the models from the previous 
+```

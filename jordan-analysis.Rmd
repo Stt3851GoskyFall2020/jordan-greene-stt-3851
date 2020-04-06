@@ -1,0 +1,229 @@
+---
+title: "STT 3851 Project 1"
+author: "Kassidy Borum, Adam Seagle, Jordan Greene"
+date: "4/06/2020"
+output: 
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 2
+    number_sections: true
+bibliography: [packages.bib]
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(readxl)
+library(tidyverse)
+library(corrplot)
+library(car)
+library(broom)
+```
+
+```{r include=FALSE}
+# automatically create a bib database for R packages
+knitr::write_bib(c(
+  .packages(), 'bookdown', 'knitr', 'rmarkdown', 'tidyverse', 'base', 'readxl',
+  'corrplot'
+), 'packages.bib')
+```
+
+```{r data, include=FALSE}
+house <- read_xlsx("data/Housing.xlsx")
+```
+
+
+# Data Summary
+
+Summary and Glimpse:
+```{r echo=FALSE}
+summary(house)
+glimpse(house)
+```
+
+### Data Summary conclusions {-}
+
+**Examine the statistics and values for each variable.  Are any missing?  Do any values need clarification or modification?  If so, why and what did you do?**
+
+Nothing seems out of place here. Summary does not report any missing values and the data all seems to be reasonable given the parameters. The only number that caught my attention initially was the 3.1 bath, but I would assume that means there is an extra vanity sink in the house that counts as that extra 0.1. I would also note that we change the `status` and `elem` variables to factors.
+
+# Exploratory Data Analysis
+
+Numerical summary of variable correlation to `price`:
+```{r echo=FALSE}
+# Only report the column of price
+(cor(house[1:9])[,2])
+```
+
+Correlation graph:
+
+```{r echo=FALSE}
+pairs(house[1:9])
+```
+
+```{r include=FALSE}
+# Make house status and elementry school a factor
+house$status <- as.factor(house$status)
+levels(house$status) <- c(act = "Active", pen = "Pending", sld = "Sold")
+house$elem <- as.factor(house$elem)
+levels(house$elem) <- c(adams = "Adams", crest = "Crest", edge = "Edge", edison = "Edison", 
+                        harris = "Harris", parker = "Parker")
+```
+
+```{r label = priceelem, fig.cap="Price per Elementary District", include=FALSE, eval=FALSE}
+ggplot(house, aes(elem, price)) + 
+  geom_boxplot() + 
+  theme_bw()
+```
+
+```{r label = pricestatus, fig.cap="Price per Status", echo=FALSE}
+ggplot(house) + 
+  geom_boxplot(aes(status, price)) + 
+  geom_jitter(aes(status, price, color = elem), width = 0.3) +
+  theme_bw() + 
+  xlab("Status of house") + 
+  ylab("Price of house") + 
+  ggtitle("Price as a function of Status with elementary district overlaid") +
+  labs(color = "Elementary\n District")  
+```
+
+```{r label = elemstatus, fig.cap = "Status in District", echo=FALSE}
+ggplot(house) + 
+  geom_boxplot(aes(elem, price)) +
+  geom_jitter(aes(elem, price, color = status), width = 0.2, alpha = 0.7) + 
+  theme_bw() + 
+  xlab("Elementary District") + 
+  ylab("Price of house") + 
+  ggtitle("Price as a function of district with status overlaid") +
+  labs(color = "Status")  
+```
+
+```{r label = statusbox, fig.cap="Status within District", echo=FALSE}
+ggplot(house) + 
+  geom_boxplot(aes(elem, price, color = status)) +
+  theme_bw() + 
+  xlab("Elementary District") + 
+  ylab("Price of house") + 
+  ggtitle("Price as a function of district with status boxplot") +
+  labs(color = "Status")  
+```
+
+
+### Exploratory Data Analysis conclusions {-}
+
+**Examine some of the variables relationships with price to help you determine which variables might be useful in an initial model.  Explain your conclusions from this initial screening.**
+
+This basic correlation calculation shows that `garagesize` followed by `lot` has the strongest positive effect while `bedrooms` has a strong negative effect on the price. I find it odd that bedrooms would have a negative correlation to price. All of these still only had weak correlation values. All were less than $\pm 0.5$. What I think could affect prices that the correlation cannot show us is the possible effects of the schools that are listed in the dataset. School districts often help the price or how fast a house will sell. We can see that in Figure \@ref(fig:elemstatus) that Harris has a maximum median price and Adams shows the lowest. When we take a look at the status of current houses in Figure \@ref(fig:pricestatus) we see that pending sales hold the highest median price. Placing the status of house sales over the elementary district in Figure \@ref(fig:elemstatus) we can see that Adams, while holding the lowest mean price also has the fewest listings also. This may allow the data to not fully represent the area. Figure \@ref(fig:statusbox) also shows the boxplot statistics within each elementary district. Knowing that prices of houses sold holds more weight upon actual price is worth noting. Also worth paying attention to is that the Harris district has a very close range of sold prices. This mean less standard deviation is likely and therefore a more consistant price can be predicted within the Harris district most likely. 
+
+
+# Initial Modeling
+
+Build initial model based upon data exploration:
+
+```{r, echo=FALSE}
+# Elements that seem most important based upon data exploration
+summary(model1 <- lm(price ~ lot + bedrooms + garagesize + yearbuilt + size + status + elem, house))
+```
+
+Graph `model1` summary information:
+
+```{r label = model1, fig.cap = "Model 1 Visual Summary", echo=FALSE}
+par(mfrow = c(2,2))
+plot(model1)
+```
+
+### Initial Modeling conclusions {-}
+
+**Using your conclusions from the exploratory data analysis, build a regression model and report your findings.**
+
+The initial model was built using the data from the correlation information along with the insight gained from plotting the elemetary districts and the house status. When looking at the graphical data from the model in Figure \@ref(fig:model1) we can see that the data is overall about normal. We can see the Residuals vs Fitted is also very close to zero. The Scale-Location does have a small amount of downward curve to it, but not enough to pull the line far off the horizontal. The Residuals vs Leverage has a couple small deviations to the baseline like the Scale-Location graph. The outliers label will be explored to determine why they are outliers. This inital model does show an R-squared value of $0.5385$.
+
+# Model Modification
+
+VIF analysis:
+```{r, echo=FALSE}
+vif(model1)
+```
+
+A closer look at outliers:
+```{r}
+house[c(74, 4, 5, 37), ]
+
+house %>% 
+  filter(bedrooms <= 2)
+
+house %>% 
+  filter(lot > 7)
+
+house %>% 
+  filter(lot < 2)
+```
+
+Create the new model:
+```{r}
+summary(model2 <- lm(price ~ bedrooms + bath + garagesize + status + 
+                       elem + size + lot + bedrooms:bath, house))
+```
+
+```{r label = model2, fig.cap = "Model 2 Visual Summary", echo=FALSE}
+par(mfrow = c(2,2))
+plot(model2)
+```
+
+### Model Modification conclusions {-}
+
+**Consider modifying your model based upon your initial results and/or diagnostic plots from the model.  Explain any modifications that you are making.  Consider variance inflation factors for each predictor in your model and comment on that in your model selection process.**
+
+Based upon the variance inflation factors the initial model is does not have a notable amount of multicollinearity. After taking a closer look at the outliers we can see that they stand out because they are the houses with the largest lot (74), the smallest house size (4), and the lowest priced house (5). It is easy to see why these showed up as outliers, yet there is no reason to modify them. It is also worth noting that the house (4) is an active listing, meaning the price reflected is what the seller wants and perhaps not an accurate value of the property. It would be helpful to match this number with an appraisal value if that were available to help determine if the listing price is inflated. After some reasoning and looking at a few other graphs of the data the model was adjusted to take into account some other factors. First the `yearbuilt` was removed as this did not show to have a significant value in the model. After that `bath` and the interaction between `bedrooms` and `bath` was added as many buyers would not choose a 4 bedroom 1 bathroom house. The combination of beds to baths is a more important consideration from personal experience buying houses. 
+
+# Conclusions
+
+Anova analsis of final model:
+```{r echo = FALSE}
+anova(model1, model2)
+```
+
+Compared to the 'all-in' model:
+```{r echo = FALSE}
+summary(lm(price ~., house))
+summary(model2)
+```
+
+```{r label = amod2, fig.cap="Price compared to Final Model Line", message=FALSE, echo = FALSE}
+amod2 <- augment(model2)
+ggplot(amod2, aes(.fitted, price)) +
+  geom_point(color = "darkred") +
+  geom_smooth(method = "lm", se = FALSE) +
+  geom_segment(aes(x = .fitted, xend = .fitted, y = price, yend = .fitted), alpha = 0.5) +
+  theme_bw() +
+  xlab("Fitted values from final model") + 
+  ylab("Price of house") + 
+  ggtitle("Price vs Fitted")
+```
+
+### 95% Confindence Intervals of the final model {-}
+```{r include=TRUE, echo=FALSE}
+# Confidence intervals for entire model2
+confint(model2)
+```
+
+### 95% Confidence Interval of mean model response {-}
+```{r}
+house_mean <-  data.frame(bedrooms = mean(house$bedrooms), bath = mean(house$bath), 
+                          garagesize = mean(house$bath), status = "Sold", 
+                          elem = "Edge", size = mean(house$size), lot = mean(house$lot))
+# Confidence Interval for house2
+predict(model2, house_mean, interval = "confidence")
+```
+
+### 95% Confidence Interval of prediction {-}
+```{r}
+house2 = data.frame(bedrooms = 3, bath = 2, garagesize = 2, status = "Active",
+                    elem = "Edge", size = 1.7, lot = 4)
+# Prediction Interval for house2
+predict(model2, house2, interval = "predict")
+```
+
+
+**Present your final model and diagnostic plots in support of that final model.  In that presentation of the final model, comment on the R-squared value and its interpretation, give 95% confidence intervals for each of the β coefficients in your model, and illustrate your model’s use with a 95% confidence interval for the mean response and a 95% prediction interval for individual response for a hypothetical house of your choosing.**
+
+The comparing the models with `anova()` we can see that the F-statistic of `model2` is stronger. From a basic comparison with a linear model which puts all data variables into the model we have improved our overall R-squared value from both the 'all-in' model and our `model1` even though we have removed variables for the final model. As we can see from Figure \@ref(fig:model2) we have been able to smooth out our baselines as much as would seem reasonable and looking at the graphs we can reason that the model has no outstanding issues to be addressed. We can see from looking at Figure \@ref(fig:amod2) that the predicted model line appears to be relatively in the center of the actual values with segments representing the residuals.
