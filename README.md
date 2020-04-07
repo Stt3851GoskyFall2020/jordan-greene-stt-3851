@@ -1,3 +1,2 @@
-# jordan-greene-stt-3851
-
-# README test push
+# Project Submitted for grading 04/06/2020
+# Group: Jordan Greene, Kassidy Borum, Adam Seagle
