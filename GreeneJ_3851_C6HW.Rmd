@@ -1,0 +1,100 @@
+---
+title: "Chapter 6 Homework"
+author: "Jordan Greene"
+date: "4/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+library(ISLR)
+library(glmnet)
+library(pls)
+```
+
+## 9. In this exercise, we will predict the number of applications received using the other variables in the College data set.
+
+```{r include = FALSE}
+data <- College
+```
+
+#### (a) Split the data set into a training set and a test set.
+
+```{r}
+set.seed(42)
+n <- dim(data)[1]
+training <- sample(n, floor(n*0.6))
+
+train_data <- data[training, ]
+test_data <- data[-training, ]
+```
+
+#### (b) Fit a linear model using least squares on the training set, and report the test error obtained.
+
+```{r}
+mod1 <- lm(Apps ~ ., data = train_data)
+mod1_p <- predict(mod1, test_data)
+
+mod1Er <- mean((mod1_p - test_data$Apps)^2)
+```
+
+Using the training and testing set created the least squares error from the `predict` function ran on the test set was `r mod1Er`.
+
+#### (c) Fit a ridge regression model on the training set, with λ chosen by cross-validation. Report the test error obtained.
+
+```{r}
+train_matrix <- model.matrix(Apps ~ ., data = train_data)
+test_matrix <- model.matrix(Apps ~ ., data = test_data)
+ridgeCVmod <- cv.glmnet(train_matrix, train_data$Apps, alpha = 0)
+ridge_min <- ridgeCVmod$lambda.min
+
+preRidge <- predict(ridgeCVmod, s = ridge_min, newx = test_matrix)
+meanRidgeEr <- mean((preRidge - test_data$Apps)^2)
+```
+
+The error reported this model is `r meanRidgeEr`.
+
+#### (d) Fit a lasso model on the training set, with λ chosen by crossvalidation. Report the test error obtained, along with the number of non-zero coefficient estimates.
+
+```{r}
+cvLasso <- cv.glmnet(train_matrix, train_data$Apps, alpha = 1)
+lasso_min <- cvLasso$lambda.min
+
+preLasso <- predict(cvLasso, s = lasso_min, newx = test_matrix)
+meanLassoEr <- mean((preLasso - test_data$Apps)^2)
+
+(preLasso2 <- predict(cvLasso, s = lasso_min, newx = test_matrix, type = "coefficients"))
+```
+
+The minimum is `r lasso_min` and the MSE from the `predict` function is `r meanLassoEr`. From the output of the coefficient matrix we can see that 4 were zero, which leaves 13 non-zero coefficient estimates.
+
+#### (e) Fit a PCR model on the training set, with M chosen by crossvalidation. Report the test error obtained, along with the value of M selected by cross-validation.
+
+```{r}
+pcrMod <- pcr(Apps ~ ., data = train_data, scale = TRUE, validation = "CV")
+summary(pcrMod)
+
+# validationplot(pcrMod ,val.type="MSEP")
+
+prePcr <- predict(pcrMod, test_data, ncomp = 17)
+meanPcrEr <- mean((prePcr - test_data$Apps)^2)
+```
+
+The summary shows that our `M` value is 17 and the test error is `r meanPcrEr`. 
+
+#### (f) Fit a PLS model on the training set, with M chosen by crossvalidation. Report the test error obtained, along with the value of M selected by cross-validation.
+
+```{r}
+plsMod <- plsr(Apps ~ ., data = train_data, scale = TRUE, validation = "CV")
+summary(plsMod)
+
+prePls <- predict(plsMod, test_data, ncomp = 13)
+meanPlsEr <- mean((prePls - test_data$Apps)^2)
+```
+
+The minimized `M` value was 13 and the test error was `r meanPlsEr`.
+
+#### (g) Comment on the results obtained. How accurately can we predict the number of college applications received? Is there much difference among the test errors resulting from these five approaches?
+
+The test error on the models were all relatively close. I did notice that the ridge regression seemed to provide a slightly lower MSE, but not by a significant amount. Because of the relative closeness of all the models we could expect that the models would predict Apps around the same level of approximately 93% accuracy.

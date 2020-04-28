@@ -1,0 +1,138 @@
+---
+title: "STT 3851 HW Chapter 5 Problem 9"
+author: "Jordan Greene"
+date: "4/24/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(MASS)
+library(readxl)
+library(tidyverse)
+library(boot)
+```
+
+```{r echo = F}
+data <- Boston
+cfb <- read_xlsx("raw/CFB2018completeISLR.xlsx")
+```
+
+# Problem 9
+## A
+
+```{r}
+mu_hat <- mean(data$medv)
+```
+
+We call the population estimate $\hat{\mu}=$ `r mu_hat`.
+
+## B
+```{r}
+st_err = sd(data$medv) / sqrt(dim(data)[1])
+```
+
+The standard error is `r st_err`.
+
+## C
+
+```{r}
+set.seed(42)
+
+st_mu_fn <- function(data, index) {
+  return(mean(data[index])) 
+}
+
+boot(data$medv, st_mu_fn, 1000)
+```
+
+The bootstrap returns a number that is very close to the value we found previously.
+
+## D
+
+```{r}
+(CI_boot <- c(22.53281-1.96*0.4089171, 22.53281+1.96*0.4089171))
+t.test(data$medv)
+```
+
+The confidence interval from the `t.test()` is very close to the confidence interval created from the bootstrap data. They are the same to the first decimal place, rounded.
+
+## E
+
+```{r}
+hat_med <- median(data$medv)
+```
+
+The median estimate of the population is `r hat_med`.
+
+## F
+
+```{r}
+set.seed(42)
+
+st_med_fn <- function(data, index) {
+  return(median(data[index])) 
+}
+
+boot(data$medv, st_med_fn, 1000)
+```
+
+Without a estimated standard median error from the population it is not possible to compare, but by comparing the mean standard error from the population estimate and the bootstrap we can see that the bootstrap method provides us with a relatively accuracy result that we can use.
+
+# College Football Problem
+
+## Validation Set Approach
+
+```{r}
+# Setup training data rows
+set.seed(42)
+
+len <- length(cfb$Zsagarin)
+train <- sample(len, floor(len*.6))
+
+training <- cfb[train, ]
+testing <- cfb[-train, ]
+```
+
+```{r}
+# I used z_lysagarin as that is what I assumed was intended by lyzsagarin in the instructions
+
+summary(validation_model1 <- lm(Zsagarin ~ z_lysagarin + Fr5star + coachexp_school, data = cfb, subset = train))
+summary(validation_model2 <- lm(Zsagarin ~ z_lysagarin + Fr5star + I(Fr5star^2) + coachexp_school + I(coachexp_school^2), data = cfb, subset = train))
+
+vm1m <- mean((cfb$Zsagarin - predict(validation_model1, cfb))[-train]^2)
+vm2m <- mean((cfb$Zsagarin - predict(validation_model2, cfb))[-train]^2)
+```
+
+Looking at the summaries, the R-squared statistics only improve slightly with the second model. The second model does show that with the interaction `Fr5star^2` it adjust the p-value of the `coachexp_school` such that is not very strong as a predictor in the second model. With using the validation set approach using mean squared error to compare we get `r vm1m` as the MSE for model 1 and `r vm2m` as the MSE for model 2. Not a significant difference overall.
+
+## Leave One Out Cross Validation
+
+```{r}
+m1glm <- glm(Zsagarin ~ z_lysagarin + Fr5star + coachexp_school, data = cfb)
+leaveone_model1 <- cv.glm(cfb, m1glm)
+leaveone_model1$delta
+```
+
+```{r}
+m2glm <- glm(Zsagarin ~ z_lysagarin + Fr5star + I(Fr5star^2) + coachexp_school + I(coachexp_school^2), data = cfb)
+leaveone_model2 <- cv.glm(cfb, m2glm)
+leaveone_model2$delta
+```
+
+Once again we don't see a huge difference in the delta values between these two models.
+
+## K-fold Cross Validation
+
+```{r}
+set.seed(42)
+
+kfold_model1 <- cv.glm(cfb, m1glm, K = 10)
+kfold_model1$delta
+
+
+kfold_model2 <- cv.glm(cfb, m2glm, K = 10)
+kfold_model2$delta
+```
+
+Here again with `K=10` we do not see a significant reduction on the delta (MSE) values. Across the entire set of models we can see that the basic linear models have the highest MSE while the K-fold Cross Validation represent the lowest MSE. The first model shows to have a slightly higher MSE across all models. The K-fold model 2 show the largest reduction to the MSE across the different validation methods.
