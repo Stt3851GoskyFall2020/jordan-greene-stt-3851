@@ -1,0 +1,266 @@
+---
+title: "STT 3851 Project 2 Final"
+author: "Kassidy Borum, Adam Seagle, Jordan Greene"
+date: "5/06/2020"
+output: 
+  bookdown::html_document2:
+    toc: true
+    toc_depth: 1
+    number_sections: false
+bibliography: [packages.bib]    
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, messages = FALSE, warning = FALSE)
+library(readxl)
+library(tidyverse)
+library(leaps)
+library(glmnet)
+library(pls)
+```
+
+```{r include=FALSE}
+# automatically create a bib database for R packages
+knitr::write_bib(c(
+  .packages(), 'bookdown', 'knitr', 'rmarkdown', 'tidyverse', 'base', 'readxl',
+  'corrplot'
+), 'packages.bib')
+```
+
+```{r data, include=FALSE}
+house <- read_xlsx("Housing.xlsx")
+```
+
+
+#A: First Candidate Model 
+```{r}
+#Final Model from Project 1
+model1 <- lm(price ~ bedrooms + bath + garagesize + status + 
+                       elem + size + lot + bedrooms:bath, house)
+summary(model1)
+```
+
+# B: Second Candidate Model
+```{r}
+names(house)
+dim(house)
+sum(is.na(house))
+```
+
+
+```{r}
+reg.fit.full <- regsubsets(price ~ ., data=house, method="forward", really.big = TRUE)
+reg.summary <- summary(reg.fit.full)
+reg.summary
+names(reg.summary)
+```
+
+  - Based on the summary of the full regfit model, the best predictors are `lot`, `garagesize`, `elemedison`, and `elemharris`
+  
+```{r}
+reg.summary$rsq
+```
+  - You can see the $R^2$ value increases from 12.84% with one variable to 53.61% when we use all the varibles. 
+  
+  
+
+```{r}
+reg.summary$bic
+
+par(mfrow=c(2,2))
+plot(reg.summary$rsq, xlab = "Number of Variables", ylab = "R-squared",type="l")
+which.max(reg.summary$rsq)
+
+plot(reg.summary$adjr2, xlab = "Number of Variables", ylab = "Adjusted R-squared",type="l")
+which.max(reg.summary$adjr2)
+
+points(9, reg.summary$adjr2[9], col = "green", cex = 2, pch = 20)
+
+plot(reg.summary$cp, xlab = "Number of Variables", ylab = "Cp", type = "l")
+which.min(reg.summary$cp)
+
+points(6, reg.summary$cp[6], col = "purple", cex = 2, pch = 20)
+which.min(reg.summary$bic)
+
+plot(reg.summary$bic, xlab = "Number of Variables", ylab = "BIC", type = "l")
+
+points(6, reg.summary$bic[6], col = "pink", cex = 2, pch = 20)
+```
+
+  - The Adjust $R^2$ is shows that 9 predictors is the best. 
+  
+```{r}
+#view(house)
+plot(reg.fit.full,scale="r2")
+plot(reg.fit.full,scale="adjr2")
+plot(reg.fit.full,scale="Cp")
+plot(reg.fit.full,scale="bic")
+coef(reg.fit.full, 9)
+```
+  - The significant coeffcients are `size`, `lot`, `bedrooms`, `status`, and `elementary`. 
+ 
+## Model Summary {-}
+
+```{r}
+model2 <- lm(price ~ size + lot + bedrooms + garagesize + status + elem, data = house)
+summary(model2)
+```
+  - This model has a slightly smaller adjust R-squared value (0.457) in comparison to our intial model from project 1 (.4797)
+    - `status` and `elem` have different cateogrical values:
+        - `status`: statuspen, statussld, 
+        - `elem`: elemcrest, elemedge, elemedison, elemharris, elemparker
+    - only statussld and elemedison are seen to be statically significant, while elemharris is slightly above the desire p-value of 0.05. 
+    
+#C: Train/Test Split
+
+```{r}
+set.seed(1)
+index <- sample(nrow(house), nrow(house) * 0.50, replace = FALSE)
+
+train <- house[index,]
+test <- house[-index,]
+```
+
+#D: Third Candidate Model
+
+```{r}
+reg.best <- regsubsets(price ~ size + lot + bath + bedrooms + agestandardized + garagesize + status + elem, data = train, nvmax = 13)
+test.matrix <- model.matrix(price ~ size + lot + bath + bedrooms + agestandardized + garagesize + status + elem, data=test, nvmax = 13)
+
+
+valid.errors <- rep(NA, 13)
+
+i = 0
+for(i in 1:13){
+  coef.reg=coef(reg.best,id=i)
+  pred=test.matrix[,names(coef.reg)]%*%coef.reg
+  valid.errors[i] <- mean((test$price-pred)^2)
+}
+
+valid.errors
+which.min(valid.errors) #Which model with the smallest error
+```
+
+```{r}
+reg.best <- regsubsets(price ~ size + lot + bath + bedrooms + agestandardized + garagesize + status + elem, data = house)
+coef(reg.best,which.min(valid.errors))
+```
+
+```{r}
+model3 <- lm(price ~ size + lot + bedrooms + status + elem, data = house)
+summary(model3)
+```
+  - This model has a good multiple r-squared value of 0.5277 and F-statistic, 7.263. But the adjusted r-squared value is smaller than the model from the previous part and from project 1. 
+  
+# E: Ridge Regression 
+```{r}
+train.x = model.matrix(price ~ ., train)
+train.y = train$price
+test.x = model.matrix(price ~ ., test)
+test.y = test$price
+
+set.seed(1)
+
+cv.out = cv.glmnet(train.x, train.y, alpha = 0)
+plot(cv.out)
+```
+```{r}
+bestlam = cv.out$lambda.min
+bestlam
+
+RidgeModel <- glmnet(train.x, train.y, alpha = 0, lambda = bestlam, thresh = 1e-12)
+coef(RidgeModel)
+
+model4 <- RidgeModel
+```
+
+#F: Principal Components Regression/Partial Least Squares Regression
+```{r}
+set.seed(1)
+pcr.fit=pcr(price ~ ., data=house,scale=TRUE,validation="CV")
+pcr.min <- which.min(RMSEP(pcr.fit)$val[1,,]) - 1
+validationplot(pcr.fit,val.type="MSEP")
+```
+
+```{r}
+set.seed(1)
+pls.fit=plsr(price ~ ., data=house,subset = index ,scale=TRUE, validation="CV")
+summary(pls.fit)
+validationplot(pls.fit,val.type="MSEP")
+```
+
+- After comparing both PLS and PCR we choose the PCR model. The PCR cross validation error is minimized at `r pcr.min` components as shown in the plot. This model had slightly better overall comparative values versus the PLS model.
+  
+#G: Errors and Comparisons
+
+```{r}
+Pred1 <- predict(model1, test)
+Error1 <- mean((Pred1-test.y)^2)
+
+Pred2 <- predict(model2, test)
+Error2 <- mean((Pred2 - test.y)^2)
+
+Pred3 <- predict(model3, test)
+Error3 <- mean((Pred3 - test.y)^2)
+
+Pred4 = predict(model4, s = bestlam, newx = test.x)
+Error4 <- mean((Pred4-test.y)^2)
+
+# We were stating PCR number of components, yet using the PLS model
+# Pred5 = predict(pls.fit, test, ncomp = 1)
+# Error5 <- mean((Pred5-test.y)^2) 
+
+Pred5 = predict(pcr.fit, test, ncomp = 7)
+Error5 <- mean((Pred5-test.y)^2)
+ 
+cbind(Error1, Error2, Error3, Error4, Error5)
+```
+
+```{r}
+rsq = function (predicted, actual) {
+  return(1 - (sum((predicted - actual) ^ 2)/sum((actual - mean(actual)) ^ 2) ))
+}
+
+RSQ1 <- rsq(Pred1, test.y)
+
+RSQ2  <- rsq(Pred2, test.y)
+
+RSQ3  <- rsq(Pred3, test.y)
+
+RSQ4 <- rsq(Pred4, test.y)
+
+RSQ5  <- rsq(Pred5, test.y)
+cbind(RSQ1, RSQ2, RSQ3, RSQ4, RSQ5)
+```
+
+  - Based on the errors, we can rank our canidate models as follow(smaller to larger error vlaues):
+    1. Model 1 / Inital Model = 1832.57
+    2. Model 2 / Regsub Model over all data = 2068.742
+    3. Model 5 / PCR Regression = 2085.447
+    4. Model 3 / Regsub Model over training data = 2197.164
+    5. Model 4 / Ridge Regression = 2574.623
+    
+  - We can rank the models based on their $R^2$ values as follows: 
+    1. Model 1 / Initial Model = 46.33
+    2. Model 2 / Regsub Model over all data = 39.41
+    3. Model 5 / PCR Regression = 38.92
+    4. Model 3 / Regsub Model over training data = 35.65
+    5. Model 4 / Ridge Regression = 24.60
+    
+# Final Model Presentation
+  - We decided to stick with our inital model, the final model from Project 1 as our final model for Project 2 based on it having the lowest MSE and highest $R^2$ value computed above. 
+  
+```{r}
+FinalModel <- lm(price ~ bedrooms + bath + garagesize + status + 
+                       elem + size + lot + bedrooms:bath, house)
+summary(FinalModel)
+```
+
+  - This final model accounts for aproximately 57% of the variation and the lowest MSE (1832.57). 
+  
+  - Model 2 is a good runner up model, the multiple r-sqaured value slightly descreases in comparison to model1 / Final Model, but the f-statistic slightly increases.
+  
+```{r}
+summary(model2)
+```
+
