@@ -60,7 +60,7 @@ names(reg.summary)
 ```{r}
 reg.summary$rsq
 ```
-  - You can see the $R^2$ value increases from 12.84% with one variable to 53.61% when we use all the varibles. 
+  - You can see the $R^2$ value increases from 12.84% with one variable to 53.61% when we use all the variables. 
   
   
 
